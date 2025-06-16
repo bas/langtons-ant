@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Langton's Ant Simulation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Primer CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/@primer/css@^20.2.4/dist/primer.css">
+  <style>
+    body {
+      background: #fff;
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .container-lg {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 0;
+    }
+    .ant-title {
+      font-size: 2.25rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.25em;
+    }
+    .ant-subtitle {
+      font-size: 1rem;
+      color: #586069;
+      text-align: center;
+      margin-bottom: 2em;
+    }
+    .ant-main {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .ant-grid-panel {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      padding: 12px;
+      width: 540px;
+      height: 540px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ant-grid {
+      background: #fff;
+      border: 1px solid #d1d5da;
+      width: 502px;
+      height: 502px;
+      display: grid;
+      grid-template-columns: repeat(50, 10px);
+      grid-template-rows: repeat(50, 10px);
+      gap: 1px;
+    }
+    .ant-cell {
+      width: 10px;
+      height: 10px;
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      box-sizing: border-box;
+    }
+    .ant-cell.ant-ant {
+      background: #d73a49;
+    }
+    .ant-stats-panel {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      padding: 24px;
+      width: 260px;
+      font-size: 1rem;
+    }
+    .ant-stats-panel h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 0;
+    }
+    .ant-controls-panel {
+      margin: 32px auto 0 auto;
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      max-width: 600px;
+    }
+    .ant-controls-panel label {
+      margin: 0 8px 0 0;
+      font-weight: 500;
+    }
+    .ant-slider {
+      width: 120px;
+      margin: 0 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-lg">
+    <header>
+      <h1 class="ant-title">Langton's Ant Simulation</h1>
+      <div class="ant-subtitle">A cellular automaton with simple rules but complex emergent behavior</div>
+    </header>
+    <main class="ant-main">
+      <section class="ant-grid-panel" aria-label="Simulation grid">
+        <div class="ant-grid" id="ant-grid" tabindex="0" aria-label="Langton's Ant grid"></div>
+      </section>
+      <aside class="ant-stats-panel" aria-label="Statistics">
+        <h2>Statistics</h2>
+        <div><strong>Position:</strong> <span id="stat-position">(25, 25)</span></div>
+        <div><strong>Direction:</strong> <span id="stat-direction">Up</span></div>
+        <div><strong>Speed:</strong> <span id="stat-speed">20</span> steps/second</div>
+        <div><strong>Steps Taken:</strong> <span id="stat-steps">0</span></div>
+        <div><strong>Cells Flipped:</strong> <span id="stat-flipped">0</span></div>
+        <div><strong>Cells Visited:</strong> <span id="stat-visited">0</span></div>
+        <div><strong>Cells Unvisited:</strong> <span id="stat-unvisited">2500</span></div>
+        <div><strong>Black Cells:</strong> <span id="stat-black">0</span></div>
+        <div><strong>White Cells:</strong> <span id="stat-white">2500</span></div>
+      </aside>
+    </main>
+    <nav class="ant-controls-panel" aria-label="Simulation controls">
+      <button class="btn btn-primary" id="start-btn">Start</button>
+      <button class="btn" id="reset-btn">Reset</button>
+      <label for="speed-slider">Speed:</label>
+      <input type="range" id="speed-slider" class="ant-slider" min="5" max="50" value="20" step="1" aria-valuemin="5" aria-valuemax="50" aria-valuenow="20" aria-label="Speed">
+      <span id="speed-value">20</span>
+    </nav>
+  </div>
+  <script>
+    // Constants
+    const GRID_SIZE = 50;
+    const CELL_SIZE = 10;
+    const DIRECTIONS = ['Up', 'Right', 'Down', 'Left'];
+    const DIR_VECTORS = [
+      {dx: 0, dy: -1}, // Up
+      {dx: 1, dy: 0},  // Right
+      {dx: 0, dy: 1},  // Down
+      {dx: -1, dy: 0}  // Left
+    ];
+
+    // State
+    let grid = [];
+    let ant = { x: 25, y: 25, dir: 0 };
+    let running = false;
+    let interval = null;
+    let speed = 20;
+    let steps = 0;
+    let cellsFlipped = 0;
+    let cellsVisited = new Set();
+
+    // DOM Elements
+    const gridEl = document.getElementById('ant-grid');
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
+
+    // Statistics
+    const statPosition = document.getElementById('stat-position');
+    const statDirection = document.getElementById('stat-direction');
+    const statSpeed = document.getElementById('stat-speed');
+    const statSteps = document.getElementById('stat-steps');
+    const statFlipped = document.getElementById('stat-flipped');
+    const statVisited = document.getElementById('stat-visited');
+    const statUnvisited = document.getElementById('stat-unvisited');
+    const statBlack = document.getElementById('stat-black');
+    const statWhite = document.getElementById('stat-white');
+
+    // Initialize grid
+    function initGrid() {
+      grid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+      ant = { x: 25, y: 25, dir: 0 };
+      steps = 0;
+      cellsFlipped = 0;
+      cellsVisited = new Set();
+      renderGrid();
+      updateStats();
+    }
+
+    // Render grid
+    function renderGrid() {
+      gridEl.innerHTML = '';
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const cell = document.createElement('div');
+          cell.className = 'ant-cell' + (grid[y][x] ? ' ant-black' : '');
+          if (ant.x === x && ant.y === y) {
+            cell.classList.add('ant-ant');
+            cell.setAttribute('aria-label', 'Ant');
+          }
+          cell.setAttribute('tabindex', '-1');
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    // Step simulation
+    function step() {
+      // Mark cell as visited
+      cellsVisited.add(`${ant.x},${ant.y}`);
+
+      // Turn and flip
+      if (grid[ant.y][ant.x] === 0) {
+        // White: turn right, flip to black
+        ant.dir = (ant.dir + 1) % 4;
+        grid[ant.y][ant.x] = 1;
+        cellsFlipped++;
+      } else {
+        // Black: turn left, flip to white
+        ant.dir = (ant.dir + 3) % 4;
+        grid[ant.y][ant.x] = 0;
+        cellsFlipped++;
+      }
+
+      // Move forward
+      ant.x += DIR_VECTORS[ant.dir].dx;
+      ant.y += DIR_VECTORS[ant.dir].dy;
+
+      // Clamp to grid
+      if (ant.x < 0) ant.x = 0;
+      if (ant.x >= GRID_SIZE) ant.x = GRID_SIZE - 1;
+      if (ant.y < 0) ant.y = 0;
+      if (ant.y >= GRID_SIZE) ant.y = GRID_SIZE - 1;
+
+      steps++;
+      renderGrid();
+      updateStats();
+    }
+
+    // Update statistics panel
+    function updateStats() {
+      statPosition.textContent = `(${ant.x}, ${ant.y})`;
+      statDirection.textContent = DIRECTIONS[ant.dir];
+      statSpeed.textContent = speed;
+      statSteps.textContent = steps;
+      statFlipped.textContent = cellsFlipped;
+      statVisited.textContent = cellsVisited.size;
+      statUnvisited.textContent = GRID_SIZE * GRID_SIZE - cellsVisited.size;
+      let black = 0;
+      for (let row of grid) for (let c of row) if (c) black++;
+      statBlack.textContent = black;
+      statWhite.textContent = GRID_SIZE * GRID_SIZE - black;
+    }
+
+    // Start/stop simulation
+    function startSimulation() {
+      if (running) return;
+      running = true;
+      startBtn.textContent = 'Stop';
+      startBtn.classList.remove('btn-primary');
+      startBtn.classList.add('btn-danger');
+      interval = setInterval(step, 1000 / speed);
+    }
+
+    function stopSimulation() {
+      running = false;
+      startBtn.textContent = 'Start';
+      startBtn.classList.remove('btn-danger');
+      startBtn.classList.add('btn-primary');
+      clearInterval(interval);
+    }
+
+    function toggleSimulation() {
+      if (running) {
+        stopSimulation();
+      } else {
+        startSimulation();
+      }
+    }
+
+    // Reset simulation
+    function resetSimulation() {
+      stopSimulation();
+      initGrid();
+    }
+
+    // Speed control
+    speedSlider.addEventListener('input', (e) => {
+      speed = parseInt(e.target.value, 10);
+      speedValue.textContent = speed;
+      statSpeed.textContent = speed;
+      if (running) {
+        clearInterval(interval);
+        interval = setInterval(step, 1000 / speed);
+      }
+    });
+
+    // Button events
+    startBtn.addEventListener('click', toggleSimulation);
+    resetBtn.addEventListener('click', resetSimulation);
+
+    // Accessibility: keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleSimulation();
+      }
+      if (e.code === 'KeyR') {
+        e.preventDefault();
+        resetSimulation();
+      }
+    });
+
+    // Initial setup
+    initGrid();
+
+    // Accessibility: ARIA live region for stats
+    statSteps.setAttribute('aria-live', 'polite');
+    statFlipped.setAttribute('aria-live', 'polite');
+    statVisited.setAttribute('aria-live', 'polite');
+    statUnvisited.setAttribute('aria-live', 'polite');
+    statBlack.setAttribute('aria-live', 'polite');
+    statWhite.setAttribute('aria-live', 'polite');
+  </script>
+</body>
+</html>
